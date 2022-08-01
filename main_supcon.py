@@ -40,6 +40,8 @@ def parse_option():
                         help='num of workers to use')
     parser.add_argument('--epochs', type=int, default=1000,
                         help='number of training epochs')
+    parser.add_argument('--gpu_num', type=int, default=0,
+                        help='num of workers to use')
 
     # optimization
     parser.add_argument('--learning_rate', type=float, default=0.05,
@@ -62,7 +64,7 @@ def parse_option():
     parser.add_argument('--std', type=str, help='std of dataset in path in form of str tuple')
     parser.add_argument('--data_folder', type=str, default=None, help='path to custom dataset')
     parser.add_argument('--size', type=int, default=32, help='parameter for RandomResizedCrop')
-    parser.add_argument('--pretrained', type=bool, default=False)
+    parser.add_argument('--pretrained', type=bool, default=False ,help='False')
     
     # method
     parser.add_argument('--method', type=str, default='SupCon',
@@ -235,7 +237,10 @@ def set_loader_category(opt):
 
 def set_model(opt):
     model = SupConVit(name=opt.model,pretrained=opt.pretrained)
-    criterion = SupConLoss(temperature=opt.temp)
+    criterion = SupConLoss(temperature=opt.temp,gpu_num = opt.gpu_num)
+    #criterion = torch.nn.CrossEntropyLoss()
+    print('criterion->',criterion)
+    device = torch.device(f'cuda:{opt.gpu_num}' if torch.cuda.is_available() else 'cpu')
 
     # enable synchronized Batch Normalization
     if opt.syncBN:
@@ -244,8 +249,11 @@ def set_model(opt):
     if torch.cuda.is_available():
         #if torch.cuda.device_count() > 1:
         #    model.encoder = torch.nn.DataParallel(model.encoder)
-        model = model.cuda()
-        criterion = criterion.cuda()
+        #torch.cuda.set_device(device) # change allocation of current GPU
+        model = model.to(device)
+        #model = model.cuda()
+        #criterion = criterion.cuda()
+        criterion = criterion.to(device)
         cudnn.benchmark = True
 
     return model, criterion
@@ -254,6 +262,8 @@ def set_model(opt):
 def train(train_loader, model, criterion, optimizer, epoch, opt):
     """one epoch training"""
     model.train()
+    device = torch.device(f'cuda:{opt.gpu_num}' if torch.cuda.is_available() else 'cpu')
+
 
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -285,8 +295,10 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
             images = torch.cat([images[0], images[1]], dim=0)
             if torch.cuda.is_available():
-                images = images.cuda(non_blocking=True)
-                labels = labels.cuda(non_blocking=True)
+                #images = images.cuda(non_blocking=True)
+                #labels = labels.cuda(non_blocking=True)
+                images = images.to(device)
+                labels = labels.to(device)
             bsz = labels.shape[0]
 
             # warm-up learning rate
@@ -331,6 +343,8 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 def train_category(train_loader, model, criterion, optimizer, epoch, opt):
     """one epoch training"""
     model.train()
+    device = torch.device(f'cuda:{opt.gpu_num}' if torch.cuda.is_available() else 'cpu')
+
 
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -342,8 +356,10 @@ def train_category(train_loader, model, criterion, optimizer, epoch, opt):
 
         images = torch.cat([images[0], images[1]], dim=0)
         if torch.cuda.is_available():
-            images = images.cuda(non_blocking=True)
-            labels = labels.cuda(non_blocking=True)
+            #images = images.cuda(non_blocking=True)
+            #labels = labels.cuda(non_blocking=True)
+            images = images.to(device)
+            labels = labels.to(device)
         bsz = labels.shape[0]
 
         # warm-up learning rate
@@ -387,6 +403,7 @@ def train_category(train_loader, model, criterion, optimizer, epoch, opt):
 
 def main():
     opt = parse_option()
+    print(f'pretrained->>>>>>>>>>>>>>>>>>{opt.pretrained}')
 
     # build data loader
     if opt.method == 'SimCLR':
@@ -422,6 +439,7 @@ def main():
         print(f'loss: {loss} epoch {epoch}')
 
         if epoch % opt.save_freq == 0:
+            print(f'ckpt_{opt.method}_pretrained_{opt.pretrained}_{opt.data_folder.split("/")[-2]}_epoch_{epoch}.pth')
             save_file = os.path.join(
                 opt.save_folder, f'ckpt_{opt.method}_pretrained_{opt.pretrained}_{opt.data_folder.split("/")[-2]}_epoch_{epoch}.pth')
             save_model(model, optimizer, opt, epoch, save_file)

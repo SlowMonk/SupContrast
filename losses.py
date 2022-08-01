@@ -11,12 +11,13 @@ import torch.nn as nn
 class SupConLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
     It also supports the unsupervised contrastive loss in SimCLR"""
-    def __init__(self, temperature=0.07, contrast_mode='all',
+    def __init__(self, temperature=0.07,gpu_num=0, contrast_mode='all',
                  base_temperature=0.07):
         super(SupConLoss, self).__init__()
         self.temperature = temperature
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
+        self.gpu_num = gpu_num
 
     def forward(self, features, labels=None, mask=None):
         """Compute loss for model. If both `labels` and `mask` are None,
@@ -31,9 +32,10 @@ class SupConLoss(nn.Module):
         Returns:
             A loss scalar.
         """
-        device = (torch.device('cuda')
-                  if features.is_cuda
-                  else torch.device('cpu'))
+        #device = (torch.device('cuda')
+        #          if features.is_cuda
+        #          else torch.device('cpu'))
+        device = torch.device(f'cuda:{self.gpu_num}' if torch.cuda.is_available() else 'cpu')
 
         if len(features.shape) < 3:
             raise ValueError('`features` needs to be [bsz, n_views, ...],'
